@@ -10,6 +10,13 @@ class PostQuerySet(models.QuerySet):
             likes_count=models.Count('likes', distinct=True)
         ).order_by('-likes_count')
     
+    def with_comments_and_likes_count(self):
+        """Возвращает посты с аннотированными количествами комментариев и лайков"""
+        return self.annotate(
+            comments_count=models.Count('comments', distinct=True),
+            likes_count=models.Count('likes', distinct=True)
+        )
+
     def fetch_with_comments_count(self):
         """
         Оптимизированная замена annotate(Count('comments')) 

@@ -37,7 +37,7 @@ def serialize_post_optimized(post):
         'slug': post.slug,
         'tags': [serialize_tag(tag) for tag in post.tags.all()],
         'first_tag_title': post.tags.all()[0].title if post.tags.all() else None,
-        'likes_amount': getattr(post, 'likes_count', post.likes.count()),
+        'likes_amount': post.likes_count,  # теперь всегда используем аннотированное значение
     }
 
 
@@ -58,6 +58,7 @@ def index(request):
     
     fresh_posts = (
         Post.objects
+        .annotate(likes_count=models.Count('likes'))
         .order_by('-published_at')
         .prefetch_related('author', 'tags')[:5]
         .fetch_with_comments_count()
@@ -133,14 +134,7 @@ def tag_filter(request, tag_title):
 
     popular_tags = Tag.objects.popular()[:5]
 
-    most_popular_posts = Post.objects.prefetch_related(
-        'tags',
-        'author',
-        'likes',
-        'comments'
-    ).annotate(
-        likes_count=models.Count('likes', distinct=True)
-    ).order_by('-likes_count')[:5]
+    most_popular_posts = Post.objects.popular().prefetch_related('author')[:5].fetch_with_comments_count()
 
     context = {
         'tag': tag.title,
