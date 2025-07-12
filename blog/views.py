@@ -37,7 +37,7 @@ def serialize_post_optimized(post):
         'slug': post.slug,
         'tags': [serialize_tag(tag) for tag in post.tags.all()],
         'first_tag_title': post.tags.all()[0].title if post.tags.all() else None,
-        'likes_amount': post.likes_count,
+        'likes_amount': getattr(post, 'likes_count', post.likes.count()),
     }
 
 
@@ -49,65 +49,22 @@ def serialize_tag(tag):
 
 
 def index(request):
-    popular_posts_data = Post.objects.annotate(
-        likes_count=models.Count('likes')
-    ).order_by('-likes_count').values('id', 'likes_count')[:5]
-
-    post_ids = [item['id'] for item in popular_posts_data]
-    
-    comments_data = Post.objects.filter(
-        id__in=post_ids
-    ).annotate(
-        comments_count=models.Count('comments')
-    ).values('id', 'comments_count')
-
-    likes_mapping = {item['id']: item['likes_count'] for item in popular_posts_data}
-    comments_mapping = {item['id']: item['comments_count'] for item in comments_data}
-
-    posts = Post.objects.filter(
-        id__in=post_ids
-    ).prefetch_related(
-        'tags',
-        'author',
+    most_popular_posts = (
+        Post.objects
+        .popular()
+        .prefetch_related('author', 'tags')[:5]
+        .fetch_with_comments_count()
     )
-
-    for post in posts:
-        post.likes_count = likes_mapping[post.id]
-        post.comments_count = comments_mapping.get(post.id, 0)
-
-    most_popular_posts = sorted(posts, key=lambda x: x.likes_count, reverse=True)
-
-    fresh_posts_data = Post.objects.order_by('-published_at').values('id')[:5]
-    fresh_post_ids = [item['id'] for item in fresh_posts_data]
     
-    fresh_comments_data = Post.objects.filter(
-        id__in=fresh_post_ids
-    ).annotate(
-        comments_count=models.Count('comments')
-    ).values('id', 'comments_count')
-
-    fresh_likes_data = Post.objects.filter(
-        id__in=fresh_post_ids
-    ).annotate(
-        likes_count=models.Count('likes')
-    ).values('id', 'likes_count')
-
-    comments_mapping = {item['id']: item['comments_count'] for item in fresh_comments_data}
-    likes_mapping = {item['id']: item['likes_count'] for item in fresh_likes_data}
-
-    fresh_posts = Post.objects.filter(
-        id__in=fresh_post_ids
-    ).prefetch_related(
-        'tags',
-        'author',
+    fresh_posts = (
+        Post.objects
+        .order_by('-published_at')
+        .prefetch_related('author', 'tags')[:5]
+        .fetch_with_comments_count()
     )
-
-    for post in fresh_posts:
-        post.comments_count = comments_mapping.get(post.id, 0)
-        post.likes_count = likes_mapping.get(post.id, 0)
-
+    
     popular_tags = Tag.objects.popular()[:5]
-
+    
     context = {
         'most_popular_posts': [serialize_post_optimized(post) for post in most_popular_posts],
         'page_posts': [serialize_post_optimized(post) for post in fresh_posts],

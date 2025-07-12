@@ -4,8 +4,42 @@ from django.contrib.auth.models import User
 
 
 class PostQuerySet(models.QuerySet):
-    def year(self, year):
-        return self.filter(published_at__year=year).order_by('published_at')
+    def popular(self):
+        """Возвращает посты, отсортированные по количеству лайков"""
+        return self.annotate(
+            likes_count=models.Count('likes', distinct=True)
+        ).order_by('-likes_count')
+    
+    def fetch_with_comments_count(self):
+        """
+        Оптимизированная замена annotate(Count('comments')) 
+        Возвращает список постов с предзагруженным количеством комментариев
+        
+        Преимущества перед annotate:
+        1. Не создает сложных SQL-запросов с подзапросами
+        2. Работает быстрее для небольших наборов данных (5-20 постов)
+        3. Позволяет использовать prefetch_related для комментариев
+        """
+        posts = list(self)
+        if not posts:
+            return posts
+            
+        from django.db.models import Count
+        comments_counts = (
+            Post.objects.filter(id__in=[post.id for post in posts])
+            .annotate(comments_count=Count('comments'))
+            .values('id', 'comments_count')
+        )
+        
+        comments_mapping = {
+            item['id']: item['comments_count'] 
+            for item in comments_counts
+        }
+        
+        for post in posts:
+            post.comments_count = comments_mapping.get(post.id, 0)
+            
+        return posts
 
 class TagQuerySet(models.QuerySet):
     def popular(self):
