@@ -40,6 +40,23 @@ class PostQuerySet(models.QuerySet):
             post.comments_count = comments_mapping.get(post.id, 0)
             
         return posts
+    
+    def similar(self, post, limit=5):
+        """
+        Возвращает посты с общими тегами (похожие посты)
+        Оптимизированная версия с одним запросом к БД
+        """
+        from django.db.models import Count
+        
+        tag_ids = post.tags.values_list('id', flat=True)
+        
+        return (
+            self.exclude(id=post.id)
+            .filter(tags__in=tag_ids)
+            .annotate(common_tags=Count('tags'))
+            .order_by('-common_tags', '-published_at')
+            .distinct()[:limit]
+        )
 
 class TagQuerySet(models.QuerySet):
     def popular(self):
