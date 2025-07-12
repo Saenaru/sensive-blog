@@ -3,6 +3,16 @@ from django.urls import reverse
 from django.contrib.auth.models import User
 
 
+class PostQuerySet(models.QuerySet):
+    def year(self, year):
+        return self.filter(published_at__year=year).order_by('published_at')
+
+class TagQuerySet(models.QuerySet):
+    def popular(self):
+        return self.annotate(
+            post_count=models.Count('posts')
+        ).order_by('-post_count')
+
 class Post(models.Model):
     title = models.CharField('Заголовок', max_length=200)
     text = models.TextField('Текст')
@@ -25,11 +35,10 @@ class Post(models.Model):
         related_name='posts',
         verbose_name='Теги')
 
+    objects = PostQuerySet.as_manager()
+
     def __str__(self):
         return self.title
-
-    def get_absolute_url(self):
-        return reverse('post_detail', args={'slug': self.slug})
 
     class Meta:
         ordering = ['-published_at']
@@ -39,6 +48,8 @@ class Post(models.Model):
 
 class Tag(models.Model):
     title = models.CharField('Тег', max_length=20, unique=True)
+
+    objects = TagQuerySet.as_manager()
 
     def __str__(self):
         return self.title
@@ -59,7 +70,7 @@ class Comment(models.Model):
     post = models.ForeignKey(
         'Post',
         on_delete=models.CASCADE,
-        related_name='comments',  # Добавляем related_name
+        related_name='comments',
         verbose_name='Пост, к которому написан'
     )
     author = models.ForeignKey(
@@ -77,3 +88,4 @@ class Comment(models.Model):
         ordering = ['published_at']
         verbose_name = 'комментарий'
         verbose_name_plural = 'комментарии'
+
