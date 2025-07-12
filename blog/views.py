@@ -37,7 +37,7 @@ def serialize_post_optimized(post):
         'slug': post.slug,
         'tags': [serialize_tag(tag) for tag in post.tags.all()],
         'first_tag_title': post.tags.all()[0].title if post.tags.all() else None,
-        'likes_amount': post.likes_count,  # теперь всегда используем аннотированное значение
+        'likes_amount': post.likes_count,
     }
 
 
@@ -75,37 +75,31 @@ def index(request):
 
 
 def post_detail(request, slug):
-    # Основной пост с префетчами
     post = Post.objects.prefetch_related(
         'tags',
         'author',
         models.Prefetch('comments', queryset=Comment.objects.select_related('author')),
         'likes'
-    ).get(slug=slug)
+    ).annotate(likes_count=models.Count('likes')).get(slug=slug)
 
-    # Похожие посты (оптимизированный запрос)
-    similar_posts = Post.objects.similar(post).fetch_with_comments_count()
+    similar_posts = Post.objects.similar(post).annotate(likes_count=models.Count('likes')).fetch_with_comments_count()
 
-    # Популярные посты (используем кастомный менеджер)
     most_popular_posts = Post.objects.popular().prefetch_related('author')[:5].fetch_with_comments_count()
 
-    # Популярные теги (кастомный менеджер)
     popular_tags = Tag.objects.popular()[:5]
 
-    # Сериализация комментариев
     serialized_comments = [{
         'text': comment.text,
         'published_at': comment.published_at,
         'author': comment.author.username,
     } for comment in post.comments.all()]
 
-    # Сериализация основного поста
     serialized_post = {
         'title': post.title,
         'text': post.text,
         'author': post.author.username,
         'comments': serialized_comments,
-        'likes_amount': post.likes.count(),
+        'likes_amount': post.likes_count,
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
         'slug': post.slug,
