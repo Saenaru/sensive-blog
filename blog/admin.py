@@ -11,26 +11,50 @@ class PostAdmin(admin.ModelAdmin):
     list_filter = ('published_at', 'tags')
     date_hierarchy = 'published_at'
     autocomplete_fields = ['tags']
+    list_per_page = 50
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related(
-            Prefetch('tags', queryset=Tag.objects.annotate(_posts_count=Count('posts'))),
-            'likes'
-        ).annotate(
-            _likes_count=Count('likes', distinct=True),
-            _comments_count=Count('comments', distinct=True)
-        )
+        return qs.prefetch_related('tags', 'likes')
     
     def likes_count(self, obj):
-        return obj._likes_count
-    likes_count.admin_order_field = '_likes_count'
+        return obj.likes.count()
     likes_count.short_description = 'Likes'
     
     def comments_count(self, obj):
-        return obj._comments_count
-    comments_count.admin_order_field = '_comments_count'
+        return obj.comments.count()
     comments_count.short_description = 'Comments'
+    
+    def get_changelist_instance(self, request):
+        changelist = super().get_changelist_instance(request)
+        
+        likes_counts = {
+            p['id']: p['likes_count']
+            for p in Post.objects.filter(
+                id__in=[obj.id for obj in changelist.result_list]
+            ).annotate(likes_count=Count('likes')).values('id', 'likes_count')
+        }
+        
+        comments_counts = {
+            p['id']: p['comments_count']
+            for p in Post.objects.filter(
+                id__in=[obj.id for obj in changelist.result_list]
+            ).annotate(comments_count=Count('comments')).values('id', 'comments_count')
+        }
+        
+        for obj in changelist.result_list:
+            obj._cached_likes_count = likes_counts.get(obj.id, 0)
+            obj._cached_comments_count = comments_counts.get(obj.id, 0)
+            
+        return changelist
+    
+    def likes_count(self, obj):
+        return getattr(obj, '_cached_likes_count', obj.likes.count())
+    likes_count.admin_order_field = '_cached_likes_count'
+    
+    def comments_count(self, obj):
+        return getattr(obj, '_cached_comments_count', obj.comments.count())
+    comments_count.admin_order_field = '_cached_comments_count'
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
@@ -44,8 +68,7 @@ class TagAdmin(admin.ModelAdmin):
         ).annotate(_posts_count=Count('posts', distinct=True))
     
     def posts_count(self, obj):
-        return obj._posts_count
-    posts_count.admin_order_field = '_posts_count'
+        return obj.posts.count()
     posts_count.short_description = 'Posts'
 
 @admin.register(Comment)
