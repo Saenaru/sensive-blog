@@ -4,6 +4,15 @@ from django.contrib.auth.models import User
 
 
 class PostQuerySet(models.QuerySet):
+    def with_tags_and_author(self):
+        return self.prefetch_related(
+            'author',
+            models.Prefetch('tags', queryset=Tag.objects.annotate(posts_count=models.Count('posts'))))
+    
+    def with_comments_and_likes(self):
+        return self.annotate(likes_count=models.Count('likes')).fetch_with_comments_count()
+
+
     def popular(self):
         """Возвращает посты, отсортированные по количеству лайков"""
         return self.annotate(
@@ -67,9 +76,12 @@ class PostQuerySet(models.QuerySet):
 
 class TagQuerySet(models.QuerySet):
     def popular(self):
-        return self.annotate(
-            post_count=models.Count('posts')
-        ).order_by('-post_count')
+        return self.annotate(posts_count=models.Count('posts')).order_by('-posts_count')
+    
+    def with_posts_count(self):
+        """Всегда добавляем подсчет постов к тегам"""
+        return self.annotate(posts_count=models.Count('posts'))
+
 
 class Post(models.Model):
     title = models.CharField('Заголовок', max_length=200)
