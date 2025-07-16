@@ -5,9 +5,9 @@ from django.contrib.auth.models import User
 
 class PostQuerySet(models.QuerySet):
     def with_tags_and_author(self):
-        return self.prefetch_related(
-            'author',
-            models.Prefetch('tags', queryset=Tag.objects.annotate(posts_count=models.Count('posts'))))
+        return self.select_related('author').prefetch_related(
+            models.Prefetch('tags', queryset=Tag.objects.annotate(posts_count=models.Count('posts')))
+        )
     
     def with_comments_and_likes(self):
         return self.annotate(likes_count=models.Count('likes')).fetch_with_comments_count()
